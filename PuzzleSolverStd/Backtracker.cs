@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+// ReSharper disable All
 
 namespace PuzzleSolver
 {
@@ -68,6 +69,7 @@ namespace PuzzleSolver
 		public static IEnumerable<(TPs, BacktrackInfo)> Solutions( TPs psIn, ExpertSystem<TPs> es)
         {
             var solutionsThusFar = new List<TPs>();
+			// In extensionsStack each element is a board and all untried moves on that board
             var extensionsStack = new Stack<(TPs, List<IExtension>)>();
             var fFirstTime = true;
 
@@ -84,6 +86,7 @@ namespace PuzzleSolver
             {
                 TPs ps;
 
+				// No more possibilities to try
                 if (extensionsStack.Count == 0)
                 {
                     yield break;
@@ -173,24 +176,13 @@ namespace PuzzleSolver
 
                 // We're either forced into this (if there's only one choice) or we're just going to make a series of guesses
                 bti?.AddBacktrackReason(lstIExtensions.Count == 1 ? BacktrackReason.ForcedChoice : BacktrackReason.Guess);
+				// TODO: Use heap instead of a list
                 lstIExtensions.Sort();
+				// TODO: If we made IPartialSolution an IComparable then we could use a stack rather than a Stack
+				// That would allow us to select best move from the most promising board produced thus far
                 extensionsStack.Push((ps, lstIExtensions));
             }
         }
-
-		////////////////////////////////////////////////////////////////////////////////////////////////////
-		/// <summary>
-		/// Searches for a fixed count of solutions.  Returns as many up to that count as it can find.
-		/// </summary>
-		///
-		/// <remarks>	Darrellp, 2/14/2011. </remarks>
-		///
-		/// <param name="ps">   	The puzzle/game up to this point. </param>
-		/// <param name="cPlys">	Count of plys deep we've searched thus far. </param>
-		/// <param name="bti">  	Backtrack info. </param>
-		///
-		/// <returns>	An evaluation of how valuable the current board position is. </returns>
-		////////////////////////////////////////////////////////////////////////////////////////////////////
 
 		// ReSharper disable once UnusedMember.Local
 		private static int EvaluateBoard(TPs ps, int cPlys, BacktrackInfo bti)
@@ -290,19 +282,19 @@ namespace PuzzleSolver
         }
 
 		////////////////////////////////////////////////////////////////////////////////////////////////////
-		/// <summary>	Attempts to expert system. </summary>
-		///
-		/// <remarks>	Darrell Plank, 11/24/2019. </remarks>
-		///
-		/// <param name="es"> 	Expert System to apply. </param>
-		/// <param name="ps"> 	Partial solution so far. </param>
-		/// <param name="bti">	[out] Reasons for inferences. </param>
-		///
-		/// <returns>
-		/// True if we've reaced an impossible situation from which there is no advancement, false if the
-		/// partial solution is still viable.
-		/// </returns>
-		////////////////////////////////////////////////////////////////////////////////////////////////////
+        /// <summary>	Attempts to expert system. </summary>
+        /// 
+        /// <remarks>	Darrell Plank, 11/24/2019. </remarks>
+        /// 
+        /// <param name="es"> 	Expert System to apply. </param>
+        /// <param name="ps"> 	Partial solution so far. </param>
+        /// <param name="bti">	[out] Reasons for inferences. </param>
+        /// <param name="fFirstTime"></param>
+        /// <returns>
+        /// True if we've reaced an impossible situation from which there is no advancement, false if the
+        /// partial solution is still viable.
+        /// </returns>
+        ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 		private static bool TryExpertSystem(ExpertSystem<TPs> es, TPs ps, BacktrackInfo bti, bool fFirstTime)
 		{

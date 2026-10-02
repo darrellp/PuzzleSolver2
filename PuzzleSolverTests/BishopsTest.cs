@@ -27,35 +27,35 @@ namespace PuzzleSolverTests
 		}
 	}
 
-	/// <summary>
-	/// This is based on the "Little Bishops" problem in 
-	/// <a href="http://www.programming-challenges.com/pg.php?page=downloadproblem&format=html&probid=110801">
-	/// Programming Challenges
-	/// </a>.  
-	/// It's not efficient enough to count the 5599888 solutions in their example data.  An efficient
-	/// method is given at the end of these remarks.  This solution is just for learning purposes.
-	/// 
-	/// We use two longs as bitmaps to represent which squares are occupied and which
-	/// are attacked.  Position 0-7 represents the first row from from left at bit 0 to right
-	/// at bit 7.  The nextrow is positions 8-15, etc..  This allows only boards up to size 8
-	/// but that's fine.
-	/// 
-	/// 
-	/// The actual way to do this is to divide the board into black squares and white squares.
-	/// for each of these boards, rotate them 45 degrees and you've got a rook placement position.
-	/// Actually, you only need to solve one of these rook placement problems since they're
-	/// independent and the total solutions is just the solutions for one squared.  Well, this
-	/// might not work if n is odd since the "white" board and the "black" board would be
-	/// different.
-	/// 
-	/// There's a great mathematical solution here:
-	/// <a href="http://blog.csdn.net/liukaipeng/article/details/3901412">Little Bishop's Solution</a>
-	/// Goes to show that if you blindly start backtracking without even imagining that there might
-	/// be a simpler solution - well, there might be.
-	/// 
-	/// </summary>
-	/// <seealso cref="PuzzleSolver.IPartialSolution" />
-	class PartialSolutionBishop : IPartialSolution
+    /// <summary>
+    /// This is based on the "Little Bishops" problem in 
+    /// <a href="http://www.cse.yorku.ca/acm/Problems/2015-09-25/LittleBishop.html">
+    /// Programming Challenges
+    /// </a>.  
+    /// It's not efficient enough to count the 5599888 solutions in their example data.  An efficient
+    /// method is given at the end of these remarks.  This solution is just for learning purposes.
+    /// 
+    /// We use two longs as bitmaps to represent which squares are occupied and which
+    /// are attacked.  Position 0-7 represents the first row from from left at bit 0 to right
+    /// at bit 7.  The nextrow is positions 8-15, etc..  This allows only boards up to size 8
+    /// but that's fine.
+    /// 
+    /// 
+    /// The actual way to do this is to divide the board into black squares and white squares.
+    /// for each of these boards, rotate them 45 degrees and you've got a rook placement position.
+    /// Actually, you only need to solve one of these rook placement problems since they're
+    /// independent and the total solutions is just the solutions for one squared.  Well, this
+    /// might not work if n is odd since the "white" board and the "black" board would be
+    /// different.
+    /// 
+    /// There's a great mathematical solution here:
+    /// <a href="http://blog.csdn.net/liukaipeng/article/details/3901412">Little Bishop's Solution</a>
+    /// Goes to show that if you blindly start backtracking without even imagining that there might
+    /// be a simpler solution - well, there might be.
+    /// 
+    /// </summary>
+    /// <seealso cref="PuzzleSolver.IPartialSolution" />
+    class PartialSolutionBishop : IPartialSolution
 	{
 		ulong Occupied { get; set; }
 		ulong Attacked { get; set; }
