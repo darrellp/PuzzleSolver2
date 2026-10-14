@@ -17,6 +17,6 @@
         <vm:MainWindowViewModel/>
     </Design.DataContext>
 
-    <v:BoardControl Board="{Binding Board}" Margin="10"/>
+    <v:BoardControl x:Name="BoardView" Board="{Binding Board}" Margin="10"/>
 
 </Window>

@@ -1,6 +1,7 @@
 using System;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Media;
 using Sokoban.Models;
 
@@ -18,6 +19,35 @@ internal class BoardControl : Control
     {
         AffectsRender<BoardControl>(BoardProperty, CellSizeProperty);
         AffectsMeasure<BoardControl>(BoardProperty, CellSizeProperty);
+    }
+
+    public BoardControl()
+    {
+        Focusable = true;
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        var dir = e.Key switch
+        {
+            Key.Up or Key.W => Board.Direction.Up,
+            Key.Down or Key.S => Board.Direction.Down,
+            Key.Left or Key.A => Board.Direction.Left,
+            Key.Right or Key.D => Board.Direction.Right,
+            _ => (Board.Direction?)null,
+        };
+
+        if (dir is { } direction && Board is { } board)
+        {
+            if (board.TryMove(direction))
+            {
+                InvalidateVisual();
+            }
+            e.Handled = true;
+            return;
+        }
+
+        base.OnKeyDown(e);
     }
 
     public double CellSize

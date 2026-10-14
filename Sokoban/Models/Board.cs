@@ -66,6 +66,55 @@ internal class Board
     }
     Point Player { get; set; }
 
+    public enum Direction
+    {
+        Up,
+        Down,
+        Left,
+        Right,
+    }
+
+    static (int dx, int dy) DirectionDelta(Direction dir) => dir switch
+    {
+        Direction.Up => (0, -1),
+        Direction.Down => (0, 1),
+        Direction.Left => (-1, 0),
+        Direction.Right => (1, 0),
+        _ => throw new ArgumentOutOfRangeException(nameof(dir)),
+    };
+
+    bool InBounds(Point pt) => pt.X >= 0 && pt.X < Width && pt.Y >= 0 && pt.Y < Height;
+
+    // Attempt to move the player in the given direction, pushing a box if necessary.
+    // Returns true if the player (and possibly a box) moved.
+    public bool TryMove(Direction dir)
+    {
+        var (dx, dy) = DirectionDelta(dir);
+        var newPlayerPt = new Point(Player.X + dx, Player.Y + dy);
+
+        if (!InBounds(newPlayerPt) || this[newPlayerPt].HasFlag(CellType.Wall))
+        {
+            return false;
+        }
+
+        if (this[newPlayerPt].HasFlag(CellType.Box))
+        {
+            var newBoxPt = new Point(newPlayerPt.X + dx, newPlayerPt.Y + dy);
+            if (!InBounds(newBoxPt) || this[newBoxPt].HasFlag(CellType.Wall) || this[newBoxPt].HasFlag(CellType.Box))
+            {
+                return false;
+            }
+
+            this[newPlayerPt] &= ~CellType.Box;
+            this[newBoxPt] |= CellType.Box;
+        }
+
+        this[Player] &= ~CellType.Player;
+        this[newPlayerPt] |= CellType.Player;
+        Player = newPlayerPt;
+        return true;
+    }
+
     int PtToIndex(Point pt)
     {
         return pt.Y * Width + pt.X;
