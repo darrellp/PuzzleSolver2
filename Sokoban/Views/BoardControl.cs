@@ -11,10 +11,19 @@ internal class BoardControl : Control
     public static readonly StyledProperty<Board?> BoardProperty =
         AvaloniaProperty.Register<BoardControl, Board?>(nameof(Board));
 
+    public static readonly StyledProperty<double> CellSizeProperty =
+        AvaloniaProperty.Register<BoardControl, double>(nameof(CellSize), 32.0);
+
     static BoardControl()
     {
-        AffectsRender<BoardControl>(BoardProperty);
-        AffectsMeasure<BoardControl>(BoardProperty);
+        AffectsRender<BoardControl>(BoardProperty, CellSizeProperty);
+        AffectsMeasure<BoardControl>(BoardProperty, CellSizeProperty);
+    }
+
+    public double CellSize
+    {
+        get => GetValue(CellSizeProperty);
+        set => SetValue(CellSizeProperty, value);
     }
 
     public Board? Board
@@ -35,9 +44,7 @@ internal class BoardControl : Control
         var w = board.Width;
         var h = board.Height;
         if (w == 0 || h == 0) return default;
-        var cell = Math.Min(
-            double.IsInfinity(availableSize.Width) ? 32 : availableSize.Width / w,
-            double.IsInfinity(availableSize.Height) ? 32 : availableSize.Height / h);
+        var cell = CellSize;
         return new Size(cell * w, cell * h);
     }
 
@@ -46,7 +53,7 @@ internal class BoardControl : Control
         var board = Board;
         if (board == null || board.Width == 0 || board.Height == 0) return;
 
-        var cell = Math.Min(Bounds.Width / board.Width, Bounds.Height / board.Height);
+        var cell = CellSize;
         if (cell <= 0) return;
         var bevel = Math.Max(1, cell / 8);
 
@@ -62,13 +69,17 @@ internal class BoardControl : Control
                     DrawWall(context, rect, bevel,
                         !IsWall(board, x, y - 1), !IsWall(board, x + 1, y),
                         !IsWall(board, x, y + 1), !IsWall(board, x - 1, y));
+                    DrawInnerCorners(context, rect, bevel, board, x, y);
                     continue;
                 }
+
+                if (type == CellType.Empty)
+                    continue;
 
                 context.FillRectangle(FloorBrush, rect);
                 bool goal = type.HasFlag(CellType.Goal);
                 if (goal)
-                    DrawBevel(context, rect, bevel, FloorBrush, Dark, Light);
+                    DrawBevel(context, rect.Deflate(rect.Width * 0.1), bevel, FloorBrush, Dark, Light);
 
                 if (type.HasFlag(CellType.Box))
                     DrawBall(context, rect, goal ? Colors.LimeGreen : Colors.Gold);
@@ -78,8 +89,32 @@ internal class BoardControl : Control
         }
     }
 
-    static bool IsWall(Board board, int x, int y) =>
-        x >= 0 && y >= 0 && x < board.Width && y < board.Height &&
+    static void DrawInnerCorners(DrawingContext context, Rect r, double b, Board board, int x, int y)
+    {
+        bool up = IsWall(board, x, y - 1), down = IsWall(board, x, y + 1);
+        bool left = IsWall(board, x - 1, y), right = IsWall(board, x + 1, y);
+
+        if (up && right && !IsWall(board, x + 1, y - 1))
+        {
+            FillPoly(context, Dark, new Point(r.Right - b, r.Top), new Point(r.Right, r.Top),
+                new Point(r.Right - b, r.Top + b), new Point(r.Right - b, r.Top));
+            FillPoly(context, Light, new Point(r.Right, r.Top), new Point(r.Right, r.Top + b),
+                new Point(r.Right - b, r.Top + b), new Point(r.Right, r.Top));
+        }
+        if (up && left && !IsWall(board, x - 1, y - 1))
+            context.FillRectangle(Light, new Rect(r.Left, r.Top, b, b));
+        if (down && right && !IsWall(board, x + 1, y + 1))
+            context.FillRectangle(Dark, new Rect(r.Right - b, r.Bottom - b, b, b));
+        if (down && left && !IsWall(board, x - 1, y + 1))
+        {
+            FillPoly(context, Dark, new Point(r.Left, r.Bottom - b), new Point(r.Left, r.Bottom),
+                new Point(r.Left + b, r.Bottom - b), new Point(r.Left, r.Bottom - b));
+            FillPoly(context, Light, new Point(r.Left + b, r.Bottom - b), new Point(r.Left + b, r.Bottom),
+                new Point(r.Left, r.Bottom), new Point(r.Left + b, r.Bottom - b));
+        }
+    }
+
+    static bool IsWall(Board board, int x, int y) =>        x >= 0 && y >= 0 && x < board.Width && y < board.Height &&
         board.Cells[y * board.Width + x].HasFlag(CellType.Wall);
 
     static void DrawWall(DrawingContext context, Rect r, double b, bool top, bool right, bool bottom, bool left)
