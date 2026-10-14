@@ -28,6 +28,16 @@ internal class BoardControl : Control
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if (e.Key == Key.Z && e.KeyModifiers.HasFlag(KeyModifiers.Control) && Board is { } boardForUndo)
+        {
+            if (boardForUndo.Undo())
+            {
+                InvalidateVisual();
+            }
+            e.Handled = true;
+            return;
+        }
+
         var dir = e.Key switch
         {
             Key.Up or Key.W => Board.Direction.Up,

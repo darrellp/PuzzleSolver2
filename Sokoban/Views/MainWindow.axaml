@@ -17,6 +17,15 @@
         <vm:MainWindowViewModel/>
     </Design.DataContext>
 
-    <v:BoardControl x:Name="BoardView" Board="{Binding Board}" Margin="10"/>
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Background="#E8E8E8" BorderBrush="#A0A0A0" BorderThickness="0,0,0,1" Padding="6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <Button Content="Reset" Click="OnResetClick"/>
+                <Button Content="Undo" Click="OnUndoClick"/>
+            </StackPanel>
+        </Border>
+
+        <v:BoardControl x:Name="BoardView" Board="{Binding Board}" Margin="10"/>
+    </DockPanel>
 
 </Window>
