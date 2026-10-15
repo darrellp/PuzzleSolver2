@@ -1,3 +1,4 @@
+//#define MARKRESTRICTED
 using System;
 using Avalonia;
 using Avalonia.Controls;
@@ -76,6 +77,7 @@ internal class BoardControl : Control
     static readonly IBrush Light = new SolidColorBrush(Color.Parse("#F4F4F4"));
     static readonly IBrush Dark = new SolidColorBrush(Color.Parse("#707070"));
     static readonly IBrush WallBrush = new SolidColorBrush(Color.Parse("#A0A0A0"));
+    static readonly IBrush RestrictedBrush = new SolidColorBrush(Color.Parse("#FFC0C0"));
 
     protected override Size MeasureOverride(Size availableSize)
     {
@@ -101,7 +103,7 @@ internal class BoardControl : Control
         {
             for (int x = 0; x < board.Width; x++)
             {
-                var type = board.Cells[y * board.Width + x];
+                var type = board.Cells[y * board.Width + x].type;
                 var rect = new Rect(x * cell, y * cell, cell, cell);
 
                 if (type.HasFlag(CellType.Wall))
@@ -115,6 +117,13 @@ internal class BoardControl : Control
 
                 if (type == CellType.Empty)
                     continue;
+#if MARKRESTRICTED
+                if (type.HasFlag(CellType.Restricted) && !type.HasFlag(CellType.Goal))
+                {
+                    context.FillRectangle(RestrictedBrush, rect);
+                    continue;
+                }
+#endif
 
                 context.FillRectangle(FloorBrush, rect);
                 bool goal = type.HasFlag(CellType.Goal);
@@ -155,7 +164,7 @@ internal class BoardControl : Control
     }
 
     static bool IsWall(Board board, int x, int y) =>        x >= 0 && y >= 0 && x < board.Width && y < board.Height &&
-        board.Cells[y * board.Width + x].HasFlag(CellType.Wall);
+        board.Cells[y * board.Width + x].type.HasFlag(CellType.Wall);
 
     static void DrawWall(DrawingContext context, Rect r, double b, bool top, bool right, bool bottom, bool left)
     {

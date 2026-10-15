@@ -43,29 +43,52 @@ internal class Board
     public int Width { get; private set; }
     public int Height { get; private set; }
 
-    public CellType[] Cells { get; private set; }
+    public struct CellInfo
+    {
+        public CellType type;
+
+        // Vertex in the base graph for this cell; null for now.
+        public Vertex? vtx;
+    }
+
+    public CellInfo[] Cells { get; private set; }
     #endregion
 
     #region Cell access
     public CellType this[int index]
     {
-        get => Cells[index];
-        set => Cells[index] = value;
+        get => Cells[index].type;
+        set => Cells[index].type = value;
     }
 
     public CellType this[Point pt]
     {
-        get => Cells[PtToIndex(pt)];
-        set => Cells[PtToIndex(pt)] = value;
+        get => Cells[PtToIndex(pt)].type;
+        set => Cells[PtToIndex(pt)].type = value;
     }
 
     public CellType this[int x, int y]
     {
-        get => Cells[y * Width + x];
-        set => Cells[y * Width + x] = value;
+        get => Cells[y * Width + x].type;
+        set => Cells[y * Width + x].type = value;
     }
     Point Player { get; set; }
 
+    int PtToIndex(Point pt)
+    {
+        return pt.Y * Width + pt.X;
+    }
+
+    Point IndexToPt(int i)
+    {
+        return new Point(i % Width, i / Width);
+    }
+
+    // Maps a box's current position to its stable identifier, assigned at load time.
+    private Dictionary<Point, int> _boxIds = new();
+    #endregion
+
+    #region IO
     public enum Direction
     {
         Up,
@@ -116,6 +139,12 @@ internal class Board
             _boxIds.Remove(newPlayerPt);
             _boxIds[newBoxPt] = ballId;
             ballPosAfter = newBoxPt;
+
+            // The cell the box moves onto becomes blocked; the cell it vacates becomes open again.
+            // Remove before add so the newly-opened vertex's edges don't include the now-blocked cell.
+            RemoveVertexAt(newBoxPt);
+            AddVertexAt(newPlayerPt);
+            this[newPlayerPt] |= CellType.Accessible;
         }
 
         this[Player] &= ~CellType.Player;
@@ -125,6 +154,7 @@ internal class Board
         PushUndo(new UndoMove(playerPosBefore, ballId, ballPosAfter));
         return true;
     }
+    #endregion
 
     #region Undo
     private readonly struct UndoMove
@@ -183,23 +213,18 @@ internal class Board
             this[Player] |= CellType.Box;
             _boxIds.Remove(move.BallPos);
             _boxIds[Player] = move.BallId;
+
+            // The cell the box is leaving becomes open again; the cell it moves onto (the player's
+            // current position) becomes blocked. Add before remove so the new vertex's edges are
+            // computed while the soon-to-be-blocked cell is still open.
+            AddVertexAt(move.BallPos);
+            RemoveVertexAt(Player);
         }
 
         this[Player] &= ~CellType.Player;
         this[move.PlayerPos] |= CellType.Player;
         Player = move.PlayerPos;
         return true;
-    }
-    #endregion
-
-    int PtToIndex(Point pt)
-    {
-        return pt.Y * Width + pt.X;
-    }
-
-    Point IndexToPt(int i)
-    {
-        return new Point(i % Width, i / Width);
     }
     #endregion
 
@@ -219,18 +244,60 @@ internal class Board
     }
 
     private Graph<VtxInfo, object> _baseGraph = new Graph<VtxInfo, object>();
-    #endregion
 
-    // Maps a box's current position to its stable identifier, assigned at load time.
-    private Dictionary<Point, int> _boxIds = new();
+    // Maps an open (non-wall, non-box) cell to its vertex in _baseGraph.
+    //private Dictionary<Point, Vertex<VtxInfo, object>> _vertices = new();
+
+    // Removes the vertex (if any) at pt from the base graph, along with its edges.
+    // Used when a box moves onto a previously open cell, turning it into an effective wall.
+    private void RemoveBoxVertices() 
+    { 
+        for (int i = 0; i < Cells.Length; i++) 
+        { 
+            if (Cells[i].type.HasFlag(CellType.Box)) 
+            { 
+                RemoveVertexAt(IndexToPt(i)); 
+            } 
+        } 
+    }
+
+    private void RemoveVertexAt(Point pt)
+    {
+        var index = PtToIndex(pt);
+        var vtx = Cells[index].vtx;
+        if (vtx != null)
+        {
+            _baseGraph.DeleteVertex(vtx.ID);
+            Cells[index].vtx = null;
+        }
+    }
+
+    // Adds a vertex at pt to the base graph, hooking it up to any already-present neighboring vertices.
+    // Used when a box moves off of a cell, turning it back into an open, traversable cell.
+    private void AddVertexAt(Point pt)
+    {
+        var vtx = InsertVtx(pt);
+        Cells[PtToIndex(pt)].vtx = vtx;
+        foreach (var neighbor in OpenNeighbors(pt))
+        {
+            var nvtx = Cells[PtToIndex(neighbor)].vtx;
+            if (nvtx != null)
+            {
+                if (vtx.FindOutEdge(nvtx.ID) == null)
+                {
+                    _baseGraph.AddDoubleEdge(vtx, nvtx);
+                }
+            }
+        }
+    }
+    #endregion
 
     #region Constructors
     public Board(int width, int height)
     {
-        Cells = new CellType[width * height];
+        Cells = new CellInfo[width * height];
         Width = width;
         Height = height;
-        Cells = new CellType[width * height];
     }
 
     public Board(String map)
@@ -247,28 +314,97 @@ internal class Board
     {
         // Breadth first search on the cells starting from the player.  Every reachable cell becomes a
         // vertex and every pair of adjacent reachable cells is joined by edges in both directions.
-        var vertices = new Dictionary<Point, Vertex<VtxInfo, object>>();
+        // Cells occupied by a box are treated as walls and excluded from the graph entirely.
         var processed = new HashSet<Point>();
         var queue = new Queue<Point>();
 
-        vertices[Player] = InsertVtx(Player);
+        AddVertexAt(Player);
         queue.Enqueue(Player);
         while (queue.TryDequeue(out Point cur))
         {
             this[cur] |= CellType.Accessible;
+            AddVertexAt(cur);
+
             processed.Add(cur);
-            foreach (Point pt in Neighbors(cur))
+            foreach (Point pt in OpenNeighbors(cur))
             {
-                if (!vertices.TryGetValue(pt, out var vtx))
+                var index = PtToIndex(pt);
+                if (Cells[index].vtx == null)
                 {
-                    vtx = InsertVtx(pt);
-                    vertices[pt] = vtx;
                     queue.Enqueue(pt);
                 }
-                // Neighbors already processed have already connected to cur
-                if (!processed.Contains(pt))
+            }
+        }
+        RemoveBoxVertices();
+    }
+
+    void LocateRestrictions()
+    {
+        // A cell is restricted if it is a dead end (only one neighbor) or if it is a corner (two neighbors that are walls).
+        for (int y = 0; y < Height; y++)
+        {
+            for (int x = 0; x < Width; x++)
+            {
+                var pt = new Point(x, y);
+                if (!this[pt].HasFlag(CellType.Accessible))
                 {
-                    _baseGraph.AddDoubleEdge(vertices[cur], vtx);
+                    continue;
+                }
+                var neighbors = Neighbors(pt).ToList();
+                if (neighbors.Count == 1)
+                {
+                    this[pt] |= CellType.Restricted;
+                    continue;
+                }
+                if (neighbors.Count == 2)
+                {
+                    var n1 = neighbors[0];
+                    var n2 = neighbors[1];
+                    if ((n1.X == x && n2.Y == y) || (n1.Y == y && n2.X == x))
+                    {
+                        this[pt] |= CellType.Restricted;
+                    }
+                }
+            }
+        }
+        // All empty cells next to a wall with a protruding wall at each end are restricted.
+        // This is a special case of a dead end that is not detected by the previous logic.
+        for (int y = 0; y < Height; y++)
+        {
+            for (int x = 0; x < Width; x++)
+            {
+                var pt = new Point(x, y);
+                if (!this[pt].HasFlag(CellType.Accessible))
+                {
+                    continue;
+                }
+                if (this[pt].HasFlag(CellType.Restricted))
+                {
+                    continue;
+                }
+                if (this[x, y].HasFlag(CellType.Wall))
+                {
+                    continue;
+                }
+                // Check horizontal
+                if (x > 0 && x < Width - 1 && this[x - 1, y].HasFlag(CellType.Wall) && this[x + 1, y].HasFlag(CellType.Wall))
+                {
+                    if ((y > 0 && this[x - 1, y - 1].HasFlag(CellType.Wall) && this[x + 1, y - 1].HasFlag(CellType.Wall)) ||
+                        (y < Height - 1 && this[x - 1, y + 1].HasFlag(CellType.Wall) && this[x + 1, y + 1].HasFlag(CellType.Wall)))
+                    {
+                        this[pt] |= CellType.Restricted;
+                        continue;
+                    }
+                }
+                // Check vertical
+                if (y > 0 && y < Height - 1 && this[x, y - 1].HasFlag(CellType.Wall) && this[x, y + 1].HasFlag(CellType.Wall))
+                {
+                    if ((x > 0 && this[x - 1, y - 1].HasFlag(CellType.Wall) && this[x - 1, y + 1].HasFlag(CellType.Wall)) ||
+                        (x < Width - 1 && this[x + 1, y - 1].HasFlag(CellType.Wall) && this[x + 1, y + 1].HasFlag(CellType.Wall)))
+                    {
+                        this[pt] |= CellType.Restricted;
+                        continue;
+                    }
                 }
             }
         }
@@ -277,6 +413,7 @@ internal class Board
     private void Analyze()
     {
         IdentifyBaseAccessibility();
+        LocateRestrictions();
     }
 
     IEnumerable<Point> Neighbors(Point pt)
@@ -291,6 +428,19 @@ internal class Board
                 continue;
             }
             yield return new Point(newx, newy);
+        }
+    }
+
+    // Like Neighbors, but also excludes cells currently occupied by a box, which are treated as
+    // walls for the purposes of the base accessibility graph.
+    IEnumerable<Point> OpenNeighbors(Point pt)
+    {
+        foreach (var neighbor in Neighbors(pt))
+        {
+            if (!this[neighbor].HasFlag(CellType.Box))
+            {
+                yield return neighbor;
+            }
         }
     }
     #endregion
@@ -310,7 +460,7 @@ internal class Board
         var lines = map.Replace("\r", "").Split('\n');
         Height = lines.Length;
         Width = lines.Max(line => line.Length);
-        Cells = new CellType[Width * Height];
+        Cells = new CellInfo[Width * Height];
         var foundPlayer = false;
 
         int player;
@@ -325,13 +475,13 @@ internal class Board
                 switch (cell)
                 {
                     case '#':
-                        Cells[ich] = CellType.Wall;
+                        Cells[ich].type = CellType.Wall;
                         break;
                     case '$':
-                        Cells[ich] = CellType.Box;
+                        Cells[ich].type = CellType.Box;
                         break;
                     case '.':
-                        Cells[ich] = CellType.Goal;
+                        Cells[ich].type = CellType.Goal;
                         break;
                     case '@':
                         if (foundPlayer)
@@ -340,11 +490,11 @@ internal class Board
                         }
                         foundPlayer = true;
                         Player = IndexToPt(ich);
-                        Cells[ich] = CellType.Player;
+                        Cells[ich].type = CellType.Player;
                         player = ich;
                         break;
                     case '*':
-                        Cells[ich] = CellType.Box | CellType.Goal;
+                        Cells[ich].type = CellType.Box | CellType.Goal;
                         break;
                     case '+':
                         if (foundPlayer)
@@ -353,11 +503,11 @@ internal class Board
                         }
                         foundPlayer = true;
                         Player = IndexToPt(ich);
-                        Cells[ich] = CellType.Player | CellType.Goal;
+                        Cells[ich].type = CellType.Player | CellType.Goal;
                         player = ich;
                         break;
                     default:
-                        Cells[ich] = CellType.Empty;
+                        Cells[ich].type = CellType.Empty;
                         break;
                 }
             }
@@ -367,7 +517,7 @@ internal class Board
         var nextBoxId = 0;
         for (int i = 0; i < Cells.Length; i++)
         {
-            if (Cells[i].HasFlag(CellType.Box))
+            if (Cells[i].type.HasFlag(CellType.Box))
             {
                 _boxIds[IndexToPt(i)] = nextBoxId++;
             }
